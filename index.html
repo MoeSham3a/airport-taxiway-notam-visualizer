@@ -362,6 +362,59 @@ async function init() {
 }
 
 // ============================================================
+// INDEXEDDB — CALIBRATION PERSISTENCE
+// ============================================================
+const CALIB_DB_NAME    = 'notam-db';
+const CALIB_DB_VERSION = 1;
+const CALIB_STORE      = 'calibData'; // key = ICAO, value = calibData object
+
+let calibDbPromise = null;
+
+function openCalibDb() {
+  if (calibDbPromise) return calibDbPromise;
+  calibDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(CALIB_DB_NAME, CALIB_DB_VERSION);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(CALIB_STORE)) {
+        req.result.createObjectStore(CALIB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+  return calibDbPromise;
+}
+
+async function saveCalibData(icao, data) {
+  try {
+    const db = await openCalibDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(CALIB_STORE, 'readwrite');
+      tx.objectStore(CALIB_STORE).put(data, icao);
+      tx.oncomplete = resolve;
+      tx.onerror    = () => reject(tx.error);
+    });
+  } catch (err) {
+    console.error('Failed to save calibration data for', icao, err);
+  }
+}
+
+async function loadCalibData(icao) {
+  try {
+    const db = await openCalibDb();
+    return await new Promise((resolve, reject) => {
+      const tx  = db.transaction(CALIB_STORE, 'readonly');
+      const req = tx.objectStore(CALIB_STORE).get(icao);
+      req.onsuccess = () => resolve(req.result || {});
+      req.onerror   = () => reject(req.error);
+    });
+  } catch (err) {
+    console.error('Failed to load calibration data for', icao, err);
+    return {};
+  }
+}
+
+// ============================================================
 // AIRPORT REGISTRY / CUSTOM AIRPORTS
 // ============================================================
 async function loadRegistry() {
@@ -407,8 +460,8 @@ async function loadAirport(icao) {
   const ap = AIRPORTS[icao];
   if (!ap) return;
   currentAirport = icao;
-  calibData = {};
   calibTwy  = null;
+  calibData = await loadCalibData(icao);
 
   if (!ap.taxiways) {
     if (ap.taxiwaysUrl) {
@@ -1008,6 +1061,7 @@ function deleteTwy(name) {
   calibData[name] = { _deleted: true };
   if (calibTwy === name) { calibTwy = null; }
   cancelTrace();
+  saveCalibData(currentAirport, calibData);
   renderTwyList();
   renderCalibDots();
   renderOverlays();
@@ -1074,6 +1128,7 @@ function commitTrace() {
   calibData[name] = { ...existing, points: [...tracePoints], label, intersects: {} };
   cancelTrace();
   recomputeIntersections();
+  saveCalibData(currentAirport, calibData);
   renderTwyList();
   renderCalibDots();
   renderOverlays();
@@ -1125,6 +1180,7 @@ function onChartClick(e) {
     document.getElementById('new-twy-name').value = '';
     document.getElementById('calib-coords').textContent = `Added ${name} at x=${x}, y=${y}`;
     recomputeIntersections();
+    saveCalibData(currentAirport, calibData);
     renderTwyList();
     renderCalibDots();
     renderOverlays();
@@ -1142,6 +1198,7 @@ Use ✏ to retrace, or Export+re-import.`;
     } else {
       calibData[calibTwy] = { points: [[x, y]], label: calibTwy, intersects: {} };
       recomputeIntersections();
+      saveCalibData(currentAirport, calibData);
       renderTwyList();
       renderCalibDots();
       renderOverlays();
@@ -1265,6 +1322,7 @@ function importJSON(event) {
         if (!v._deleted) { calibData[k] = migrateEntry(k, v); count++; }
       });
       recomputeIntersections();
+      saveCalibData(currentAirport, calibData);
       document.getElementById('calib-coords').textContent = `Imported ${count} taxiways. Intersections recomputed.`;
       renderTwyList();
       renderCalibDots();
