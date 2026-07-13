@@ -344,13 +344,17 @@ let calibTwy       = null;
 let calibData      = {};   // live edits: twyName → {x,y}
 
 const CUSTOM_AIRPORTS_KEY = 'notam_custom_airports';
+const LAST_AIRPORT_KEY    = 'notam_last_airport';
 
 // ============================================================
 // INIT
 // ============================================================
 async function init() {
   await loadRegistry();
-  const startIcao = AIRPORTS[currentAirport] ? currentAirport : Object.keys(AIRPORTS)[0];
+  const lastIcao  = localStorage.getItem(LAST_AIRPORT_KEY);
+  const startIcao = AIRPORTS[lastIcao] ? lastIcao
+                   : AIRPORTS[currentAirport] ? currentAirport
+                   : Object.keys(AIRPORTS)[0];
   if (startIcao) await loadAirport(startIcao);
   initWindow();
   updateClock();
@@ -460,6 +464,7 @@ async function loadAirport(icao) {
   const ap = AIRPORTS[icao];
   if (!ap) return;
   currentAirport = icao;
+  localStorage.setItem(LAST_AIRPORT_KEY, icao);
   calibTwy  = null;
   calibData = await loadCalibData(icao);
 
