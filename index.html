@@ -112,6 +112,13 @@
   .pulse-ring { animation: pulse 2s ease-in-out infinite; }
   .not-for-nav { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-family: var(--cond); font-size: 10px; letter-spacing: 0.15em; color: var(--text3); pointer-events: none; }
 
+  /* FATAL LOAD ERROR */
+  .load-error-banner { display: none; position: absolute; inset: 0; z-index: 50; background: rgba(10,13,17,0.97); align-items: center; justify-content: center; padding: 30px; text-align: center; }
+  .load-error-banner.visible { display: flex; }
+  .load-error-banner .title { font-family: var(--cond); font-size: 18px; font-weight: 600; color: var(--red); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
+  .load-error-banner .msg { max-width: 480px; font-family: var(--body); font-size: 13px; line-height: 1.7; color: var(--text2); }
+  .load-error-banner code { font-family: var(--mono); color: var(--accent); background: var(--bg3); padding: 1px 5px; border-radius: 2px; }
+
   /* EDITOR ADDITIONS */
   .calib-divider { border: none; border-top: 1px solid #5a3a08; margin: 8px 0; }
   .calib-row { display: flex; gap: 5px; margin-bottom: 6px; }
@@ -234,6 +241,12 @@
         <g id="marker-layer"></g>
         <g id="calib-dot-layer"></g>
       </svg>
+    </div>
+    <div class="load-error-banner" id="load-error-banner">
+      <div>
+        <div class="title">Could Not Load Airport Data</div>
+        <div class="msg" id="load-error-msg"></div>
+      </div>
     </div>
     <div class="chart-info">
       <div class="chart-info-icao" id="info-icao">OMDB</div>
@@ -422,17 +435,35 @@ async function loadCalibData(icao) {
 // AIRPORT REGISTRY / CUSTOM AIRPORTS
 // ============================================================
 async function loadRegistry() {
+  let registryFailed = false;
   try {
     const res = await fetch('airports/registry.json');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const reg = await res.json();
     Object.entries(reg).forEach(([icao, meta]) => {
       AIRPORTS[icao] = { icao, taxiways: null, custom: false, ...meta };
     });
   } catch (err) {
     console.error('Failed to load airport registry', err);
+    registryFailed = true;
   }
   loadCustomAirports();
   populateAirportSelect();
+  // Only fatal if we ended up with nothing at all to show (no built-in and no
+  // custom airports) — a registry fetch failure alone shouldn't block a user
+  // who still has custom airports cached from localStorage.
+  if (registryFailed && Object.keys(AIRPORTS).length === 0) {
+    showFatalLoadError();
+  }
+}
+
+function showFatalLoadError() {
+  const banner = document.getElementById('load-error-banner');
+  const msg    = document.getElementById('load-error-msg');
+  msg.innerHTML = location.protocol === 'file:'
+    ? 'Browsers block a page opened directly from disk (<code>file://</code>) from fetching its own local files, so airport data can\'t load. Serve this folder over HTTP instead — for example, run <code>python -m http.server 8000</code> in this folder, then open <code>http://localhost:8000</code>.'
+    : 'Check your network connection, then reload the page.';
+  banner.classList.add('visible');
 }
 
 function loadCustomAirports() {
