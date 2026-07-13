@@ -1,0 +1,11 @@
+{
+  "OMDB": {
+    "name": "Dubai International",
+    "iata": "DXB",
+    "country": "AE",
+    "region": "UAE",
+    "viewBox": "0 0 988 667",
+    "chart": "airports/OMDB/chart.jpg",
+    "taxiwaysUrl": "airports/OMDB/taxiways.json"
+  }
+}

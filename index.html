@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GND/NOTAM Chart Viewer — OMDB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0d11; --bg2: #111620; --bg3: #181e2a; --bg4: #1f2736;
+    --border: #2a3347; --border2: #3a4a66;
+    --text: #c8d4e8; --text2: #7a8fa8; --text3: #4a5a72;
+    --accent: #3d8ef0; --accent2: #1a4d8a;
+    --green: #2aad5e; --amber: #e8a020; --amber-bg: #2a1e08;
+    --red: #e84040; --red-bg: #2a0d0d;
+    --mono: 'Share Tech Mono', monospace;
+    --cond: 'Barlow Condensed', sans-serif;
+    --body: 'Barlow', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--body); font-size: 13px; height: 100vh; overflow: hidden; }
+  .app { display: grid; grid-template-rows: 48px 1fr; grid-template-columns: 300px 1fr; height: 100vh; }
+
+  /* TOPBAR */
+  .topbar { grid-column: 1/-1; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 16px; gap: 20px; }
+  .topbar-logo { font-family: var(--cond); font-size: 17px; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+  .topbar-logo span { color: var(--text2); font-weight: 400; }
+  .topbar-sep { width: 1px; height: 24px; background: var(--border); }
+  .airport-select { background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 3px; cursor: pointer; outline: none; }
+  .airport-select:focus { border-color: var(--accent); }
+  .airport-badge { font-family: var(--mono); font-size: 10px; color: var(--text2); background: var(--bg3); border: 1px solid var(--border); padding: 2px 8px; border-radius: 2px; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .utc-clock { font-family: var(--mono); font-size: 13px; color: var(--green); letter-spacing: 0.08em; }
+  .calib-btn { font-family: var(--cond); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; background: transparent; border: 1px solid var(--border); color: var(--text3); cursor: pointer; border-radius: 2px; transition: all 0.15s; }
+  .calib-btn.active { background: #2a1e08; border-color: var(--amber); color: var(--amber); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-section { border-bottom: 1px solid var(--border); padding: 11px 13px; }
+  .section-label { font-family: var(--cond); font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-bottom: 9px; }
+
+  /* WINDOW */
+  .window-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 7px; }
+  .wf label { display: block; font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 3px; }
+  .wf input { width: 100%; background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 10px; padding: 5px 6px; border-radius: 3px; outline: none; }
+  .wf input:focus { border-color: var(--accent); }
+  .window-status { font-family: var(--mono); font-size: 10px; color: var(--text3); padding: 3px 0; }
+
+  /* NOTAM INPUT */
+  .source-tabs { display: flex; gap: 4px; margin-bottom: 9px; }
+  .tab-btn { font-family: var(--cond); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; background: transparent; border: 1px solid var(--border); color: var(--text3); cursor: pointer; border-radius: 2px; transition: all 0.15s; }
+  .tab-btn.active { background: var(--accent2); border-color: var(--accent); color: var(--accent); }
+  .notam-ta { width: 100%; background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 10px; padding: 7px; border-radius: 3px; resize: vertical; min-height: 85px; outline: none; line-height: 1.5; }
+  .notam-ta:focus { border-color: var(--accent); }
+  .notam-ta::placeholder { color: var(--text3); }
+  .parse-btn { margin-top: 7px; width: 100%; background: var(--accent2); border: 1px solid var(--accent); color: var(--accent); font-family: var(--cond); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px; border-radius: 3px; cursor: pointer; transition: background 0.15s; }
+  .parse-btn:hover { background: #1d5799; }
+
+  /* NOTAM LIST */
+  .notam-list { flex: 1; overflow-y: auto; }
+  .notam-list::-webkit-scrollbar { width: 4px; }
+  .notam-list::-webkit-scrollbar-track { background: var(--bg2); }
+  .notam-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .notam-item { padding: 9px 13px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+  .notam-item:hover { background: var(--bg3); }
+  .notam-item.selected { background: var(--bg4); border-left: 2px solid var(--accent); padding-left: 11px; }
+  .notam-item-hdr { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; flex-wrap: wrap; }
+  .sbadge { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; padding: 2px 5px; border-radius: 2px; text-transform: uppercase; flex-shrink: 0; }
+  .sbadge.ACTIVE  { background: var(--red-bg);  color: var(--red);   border: 1px solid #5a1a1a; }
+  .sbadge.FUTURE  { background: var(--amber-bg); color: var(--amber); border: 1px solid #5a3a08; }
+  .sbadge.EXPIRED { background: #12161d;         color: var(--text3); border: 1px solid var(--border); }
+  .notam-twy { font-family: var(--mono); font-size: 10px; color: var(--text); font-weight: bold; }
+  .notam-desc { font-size: 11px; color: var(--text2); line-height: 1.4; margin-bottom: 4px; }
+  .notam-time { font-family: var(--mono); font-size: 9px; color: var(--text3); }
+  .raw-toggle { font-family: var(--mono); font-size: 9px; color: var(--text3); background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; margin-top: 3px; display: block; }
+  .raw-toggle:hover { color: var(--text2); }
+  .notam-raw { margin-top: 5px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; padding: 5px 7px; font-family: var(--mono); font-size: 9px; color: var(--text3); line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .empty-state { padding: 28px 13px; text-align: center; color: var(--text3); font-family: var(--mono); font-size: 11px; line-height: 2; }
+
+  /* CHART AREA */
+  .chart-area { position: relative; overflow: hidden; background: #0d1219; }
+  .chart-wrap { position: relative; width: 100%; height: 100%; }
+  #chart-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
+  #overlay-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  #overlay-svg.calib-mode { pointer-events: all; cursor: crosshair; }
+
+  /* CHART INFO */
+  .chart-info { position: absolute; top: 10px; left: 10px; background: rgba(10,13,17,0.88); border: 1px solid var(--border); border-radius: 3px; padding: 5px 9px; pointer-events: none; }
+  .chart-info-icao { font-family: var(--mono); font-size: 17px; font-weight: bold; color: var(--accent); letter-spacing: 0.1em; }
+  .chart-info-name { font-family: var(--cond); font-size: 11px; color: var(--text2); margin-top: 1px; }
+
+  /* LEGEND */
+  .chart-legend { position: absolute; bottom: 14px; right: 14px; background: rgba(10,13,17,0.92); border: 1px solid var(--border); border-radius: 4px; padding: 9px 11px; font-family: var(--mono); font-size: 10px; pointer-events: none; }
+  .legend-title { font-family: var(--cond); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-bottom: 7px; }
+  .legend-row { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; color: var(--text2); }
+  .lswatch { width: 18px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+
+  /* CALIBRATION PANEL */
+  .calib-panel { position: absolute; top: 10px; right: 10px; background: rgba(42,30,8,0.97); border: 1px solid var(--amber); border-radius: 4px; padding: 10px 12px; font-family: var(--mono); font-size: 10px; color: var(--amber); max-width: 260px; display: none; z-index: 10; }
+  .calib-panel.visible { display: block; }
+  .calib-panel h4 { font-family: var(--cond); font-size: 11px; letter-spacing: 0.1em; margin-bottom: 8px; text-transform: uppercase; }
+  .calib-select { width: 100%; background: #1a1200; border: 1px solid var(--amber); color: var(--amber); font-family: var(--mono); font-size: 10px; padding: 4px 6px; border-radius: 2px; outline: none; margin-bottom: 7px; }
+  .calib-coords { font-size: 9px; color: #c8a060; margin-bottom: 6px; line-height: 1.8; }
+  .calib-hint { font-size: 9px; color: #8a6a30; line-height: 1.6; }
+  .calib-export { margin-top: 8px; width: 100%; background: #2a1e08; border: 1px solid var(--amber); color: var(--amber); font-family: var(--cond); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 5px; border-radius: 2px; cursor: pointer; }
+
+  /* OVERLAY STYLES */
+  .twy-overlay { pointer-events: none; }
+  @keyframes pulse { 0%,100%{opacity:0.55} 50%{opacity:1} }
+  .pulse-ring { animation: pulse 2s ease-in-out infinite; }
+  .not-for-nav { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-family: var(--cond); font-size: 10px; letter-spacing: 0.15em; color: var(--text3); pointer-events: none; }
+
+  /* EDITOR ADDITIONS */
+  .calib-divider { border: none; border-top: 1px solid #5a3a08; margin: 8px 0; }
+  .calib-row { display: flex; gap: 5px; margin-bottom: 6px; }
+  .calib-input { flex: 1; background: #1a1200; border: 1px solid var(--amber); color: var(--amber); font-family: var(--mono); font-size: 10px; padding: 4px 6px; border-radius: 2px; outline: none; text-transform: uppercase; }
+  .calib-input::placeholder { color: #5a3a08; text-transform: none; }
+  .calib-action { background: #2a1e08; border: 1px solid var(--amber); color: var(--amber); font-family: var(--cond); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .calib-action:hover { background: #3a2a08; }
+  .calib-action.danger { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+  .calib-action.danger:hover { background: #3a1010; }
+  .calib-action.ok { border-color: var(--green); color: var(--green); background: #0d2a1a; }
+  .calib-action.ok:hover { background: #0f3520; }
+  .calib-twy-list { max-height: 120px; overflow-y: auto; margin-bottom: 6px; border: 1px solid #5a3a08; border-radius: 2px; }
+  .calib-twy-list::-webkit-scrollbar { width: 3px; }
+  .calib-twy-list::-webkit-scrollbar-thumb { background: #5a3a08; }
+  .calib-twy-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 6px; border-bottom: 1px solid #3a2808; cursor: pointer; transition: background 0.1s; }
+  .calib-twy-row:last-child { border-bottom: none; }
+  .calib-twy-row:hover { background: #2a1e08; }
+  .calib-twy-row.selected-twy { background: #3a2a08; }
+  .calib-twy-name { font-family: var(--mono); font-size: 10px; color: var(--amber); }
+  .calib-twy-coords { font-family: var(--mono); font-size: 8px; color: #8a6a30; }
+  .calib-del-btn { background: none; border: none; color: var(--red); font-size: 11px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0.6; }
+  .calib-del-btn:hover { opacity: 1; }
+  .add-mode-hint { font-size: 9px; color: var(--green); margin-bottom: 5px; display: none; }
+  .add-mode-hint.visible { display: block; }
+
+  /* RESPONSIVE & PWA */
+  .mobile-menu-btn { display: none; background: none; border: none; color: var(--accent); font-size: 24px; cursor: pointer; padding: 0 10px; margin-left:-10px; }
+  .sidebar-backdrop { display: none; position: absolute; top: 48px; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 15; }
+  .manager-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+  .manager-content { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; padding: 20px; font-family: var(--body); }
+  .manager-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .manager-title { font-family: var(--cond); font-size: 18px; color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase; }
+  .close-modal { background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; padding:0 5px; }
+  .airport-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 12px; }
+  .airport-card-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .ac-icao { font-family: var(--mono); font-size: 16px; color: var(--amber); font-weight: bold; }
+  .ac-name { color: var(--text); font-size: 14px; }
+  .ac-status { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  .ac-status.loaded { color: var(--green); }
+  .ac-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; flex-wrap: wrap; }
+  .mgr-btn { font-family: var(--cond); font-size: 12px; padding: 6px 12px; border-radius: 3px; cursor: pointer; text-transform: uppercase; border: 1px solid var(--border); background: var(--bg4); color: var(--text); transition: all 0.15s; }
+  .mgr-btn:hover { background: var(--border); }
+  .mgr-btn.primary { background: var(--accent2); border-color: var(--accent); color: var(--accent); }
+  .mgr-btn.danger { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  
+  /* Touch target sizes */
+  @media (pointer: coarse) {
+    .calib-action, .tab-btn, .parse-btn, .calib-btn, .calib-export, .airport-select, .mgr-btn { min-height: 44px; font-size: 14px; }
+    .notam-item { min-height: 52px; padding: 12px 16px; }
+    .sidebar-section { padding: 12px 16px; }
+  }
+
+  @media (max-width: 999px) {
+    .app { grid-template-columns: 1fr; }
+    .mobile-menu-btn { display: block; }
+    .sidebar { position: absolute; top: 48px; left: 0; bottom: 0; width: 300px; transform: translateX(-100%); transition: transform 0.3s ease; z-index: 20; border-right: 1px solid var(--border); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-backdrop.visible { display: block; }
+    .topbar-logo span { display: none; }
+    .airport-badge { display: none; }
+    .topbar { gap: 10px; padding: 0 10px; }
+  }
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-logo">GND<span>/</span>NOTAM
+      <span style="font-size:11px;color:var(--text3);font-weight:400;letter-spacing:0.05em;margin-left:2px">CHART VIEWER</span>
+    </div>
+    <div class="topbar-sep"></div>
+    <select class="airport-select" id="airport-select" onchange="switchAirport(this.value)">
+    </select>
+    <button class="calib-btn" onclick="openAirportManager()" style="margin-left:-5px;">⊞</button>
+    <div class="airport-badge" id="airport-badge">AE · UAE · IATA: DXB</div>
+    <div class="topbar-right">
+      <button class="calib-btn" id="calib-btn" onclick="toggleCalib()">⊕ Calibrate</button>
+      <div class="utc-clock" id="clock">0000Z</div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="section-label">Arrival Window (UTC)</div>
+      <div class="window-row">
+        <div class="wf"><label>FROM</label><input type="datetime-local" id="arr-from"></div>
+        <div class="wf"><label>TO</label><input type="datetime-local" id="arr-to"></div>
+      </div>
+      <div class="window-status" id="window-status">Window: — not set —</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">NOTAM Source</div>
+      <div class="source-tabs">
+        <button class="tab-btn active" id="tab-manual" onclick="switchTab('manual')">Manual</button>
+        <button class="tab-btn" id="tab-sample" onclick="switchTab('sample')">Sample</button>
+      </div>
+      <textarea class="notam-ta" id="notam-input"
+        placeholder="Paste NOTAM text here...&#10;&#10;A1234/25 NOTAMN&#10;A) OMDB B) 2506010600 C) 2506012200&#10;E) TWY M6 CLSD"></textarea>
+      <button class="parse-btn" onclick="parseNotams()">▶ Parse NOTAMs</button>
+    </div>
+
+    <div class="section-label" style="padding:9px 13px 0;color:var(--text3);">Parsed Closures</div>
+    <div class="notam-list" id="notam-list">
+      <div class="empty-state">No NOTAMs parsed.<br>Paste text above and click Parse.</div>
+    </div>
+  </div>
+
+  <!-- CHART AREA -->
+  <div class="chart-area" id="chart-area">
+    <div class="chart-wrap" id="chart-wrap">
+      <img id="chart-img" alt="OMDB Ground Chart">
+      <svg id="overlay-svg" style="touch-action: none;" viewBox="0 0 988 667" xmlns="http://www.w3.org/2000/svg">
+        <g id="twy-highlight-layer"></g>
+        <g id="marker-layer"></g>
+        <g id="calib-dot-layer"></g>
+      </svg>
+    </div>
+    <div class="chart-info">
+      <div class="chart-info-icao" id="info-icao">OMDB</div>
+      <div class="chart-info-name" id="info-name">Dubai International</div>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-title">Legend</div>
+      <div class="legend-row"><div class="lswatch" style="background:#e84040"></div> CLSD — Active</div>
+      <div class="legend-row"><div class="lswatch" style="background:#e8a020"></div> CLSD — Future</div>
+      <div class="legend-row"><div class="lswatch" style="background:#4a5a72"></div> CLSD — Expired</div>
+    </div>
+    <div class="not-for-nav">NOT FOR NAVIGATION</div>
+
+    <!-- TAXIWAY EDITOR PANEL -->
+    <div class="calib-panel" id="calib-panel">
+      <h4>⊕ Taxiway Editor</h4>
+
+      <!-- IMPORT JSON -->
+      <div class="calib-row">
+        <label style="font-size:9px;color:#8a6a30;line-height:2.2">Import JSON:</label>
+        <input type="file" id="import-json-input" accept=".json" style="display:none" onchange="importJSON(event)">
+        <button class="calib-action ok" onclick="document.getElementById('import-json-input').click()">⬆ Import</button>
+      </div>
+
+      <hr class="calib-divider">
+
+      <!-- TAXIWAY LIST -->
+      <div style="font-size:9px;color:#8a6a30;margin-bottom:4px">Mapped taxiways — click to select, ✕ to delete:</div>
+      <div class="calib-twy-list" id="calib-twy-list"></div>
+
+      <!-- MOVE SELECTED -->
+      <div class="calib-coords" id="calib-coords">Select a taxiway above, then click chart to reposition.</div>
+
+      <hr class="calib-divider">
+
+      <!-- ADD NEW -->
+      <div style="font-size:9px;color:#8a6a30;margin-bottom:4px">Add missing taxiway:</div>
+      <div class="calib-row">
+        <input class="calib-input" id="new-twy-name" placeholder="e.g. M3B" maxlength="6">
+        <button class="calib-action ok" onclick="startAddTwy()">+ Add</button>
+      </div>
+      <div class="add-mode-hint" id="add-mode-hint">▶ Click on chart to place <span id="add-twy-label"></span></div>
+
+      <!-- TRACE CONTROLS — shown only during trace mode -->
+      <div id="trace-controls" style="display:none;flex-direction:column;gap:5px;margin-bottom:6px">
+        <hr class="calib-divider">
+        <div style="font-size:9px;color:var(--green)">TRACE MODE ACTIVE</div>
+        <div class="calib-row">
+          <button class="calib-action ok" style="flex:1" onclick="commitTrace()">✓ Done</button>
+          <button class="calib-action" onclick="undoLastTracePoint()">⌫ Undo</button>
+          <button class="calib-action danger" onclick="clearTrace()">✕ Clear</button>
+        </div>
+      </div>
+
+      <hr class="calib-divider">
+
+      <!-- EXPORT -->
+      <div class="calib-row">
+        <button class="calib-export" style="flex:1;margin:0" onclick="exportCalibData()">⬇ Export JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Airport Manager Modal -->
+  <div class="manager-modal" id="manager-modal">
+    <div class="manager-content">
+      <div class="manager-header">
+        <div class="manager-title">Airport Manager</div>
+        <button class="close-modal" onclick="closeAirportManager()">✕</button>
+      </div>
+      <div id="manager-list"></div>
+      <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border);">
+        <div class="section-label" style="margin-bottom: 12px;">Add Custom Airport</div>
+        <div class="window-row">
+          <div class="wf"><label>ICAO</label><input type="text" id="custom-icao" placeholder="e.g. OOMS" maxlength="4" style="text-transform:uppercase;"></div>
+          <div class="wf"><label>Name</label><input type="text" id="custom-name" placeholder="Muscat Intl"></div>
+        </div>
+        <div class="window-row" style="grid-template-columns: 1fr;">
+          <div class="wf"><label>Chart Image (.jpg/.png)</label><input type="file" id="custom-chart" accept="image/*"></div>
+          <div class="wf"><label>Taxiway Data (.json)</label><input type="file" id="custom-twy" accept=".json"></div>
+        </div>
+        <button class="mgr-btn primary" style="width: 100%; margin-top: 10px;" onclick="importCustomAirport()">+ Add Airport</button>
+      </div>
+    </div>
+  </div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+</div>
+
+<script>
+</script>
+
+<script>
+// ============================================================
+// AIRPORT DATABASE
+// ============================================================
+// ============================================================
+// STATE
+// ============================================================
+let AIRPORTS       = {};   // icao → { icao,name,iata,country,region,viewBox,chart,taxiways,taxiwaysUrl,custom }
+let currentAirport = 'OMDB';
+let parsedNotams   = [];
+let selectedIdx    = null;
+let windowFrom     = null;
+let windowTo       = null;
+let showRaw        = {};
+let calibMode      = false;
+let calibTwy       = null;
+let calibData      = {};   // live edits: twyName → {x,y}
+
+const CUSTOM_AIRPORTS_KEY = 'notam_custom_airports';
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  await loadRegistry();
+  const startIcao = AIRPORTS[currentAirport] ? currentAirport : Object.keys(AIRPORTS)[0];
+  if (startIcao) await loadAirport(startIcao);
+  initWindow();
+  updateClock();
+  setInterval(updateClock, 1000);
+  document.getElementById('arr-from').addEventListener('change', onWindowChange);
+  document.getElementById('arr-to').addEventListener('change', onWindowChange);
+  // Calibration click handler
+  document.getElementById('overlay-svg').addEventListener('click', onChartClick);
+}
+
+// ============================================================
+// AIRPORT REGISTRY / CUSTOM AIRPORTS
+// ============================================================
+async function loadRegistry() {
+  try {
+    const res = await fetch('airports/registry.json');
+    const reg = await res.json();
+    Object.entries(reg).forEach(([icao, meta]) => {
+      AIRPORTS[icao] = { icao, taxiways: null, custom: false, ...meta };
+    });
+  } catch (err) {
+    console.error('Failed to load airport registry', err);
+  }
+  loadCustomAirports();
+  populateAirportSelect();
+}
+
+function loadCustomAirports() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_AIRPORTS_KEY);
+    if (!raw) return;
+    const custom = JSON.parse(raw);
+    Object.entries(custom).forEach(([icao, ap]) => { AIRPORTS[icao] = ap; });
+  } catch (err) {
+    console.error('Failed to load custom airports', err);
+  }
+}
+
+function saveCustomAirports() {
+  const custom = {};
+  Object.values(AIRPORTS).forEach(ap => { if (ap.custom) custom[ap.icao] = ap; });
+  localStorage.setItem(CUSTOM_AIRPORTS_KEY, JSON.stringify(custom));
+}
+
+function populateAirportSelect() {
+  const sel = document.getElementById('airport-select');
+  sel.innerHTML = Object.values(AIRPORTS)
+    .map(ap => `<option value="${ap.icao}">${ap.icao} — ${ap.name}</option>`)
+    .join('');
+  sel.value = currentAirport;
+}
+
+async function loadAirport(icao) {
+  const ap = AIRPORTS[icao];
+  if (!ap) return;
+  currentAirport = icao;
+  calibData = {};
+  calibTwy  = null;
+
+  if (!ap.taxiways) {
+    if (ap.taxiwaysUrl) {
+      try {
+        const res = await fetch(ap.taxiwaysUrl);
+        ap.taxiways = await res.json();
+      } catch (err) {
+        console.error('Failed to load taxiways for', icao, err);
+        ap.taxiways = {};
+      }
+    } else {
+      ap.taxiways = {};
+    }
+  }
+
+  document.getElementById('info-icao').textContent = ap.icao;
+  document.getElementById('info-name').textContent = ap.name;
+  document.getElementById('airport-badge').textContent =
+    (ap.country || '—') + ' · ' + (ap.region || '—') + ' · IATA: ' + (ap.iata || '—');
+  document.getElementById('overlay-svg').setAttribute('viewBox', ap.viewBox || '0 0 1000 1000');
+  document.getElementById('chart-img').src = ap.chart;
+  document.getElementById('chart-img').alt = ap.icao + ' Ground Chart';
+  document.getElementById('airport-select').value = icao;
+
+  populateCalibSelect(icao);
+  rerenderList();
+  renderOverlays();
+}
+
+function switchAirport(icao) { loadAirport(icao); }
+
+// ============================================================
+// UTC CLOCK
+// ============================================================
+function updateClock() {
+  const n = new Date();
+  const p = v => String(v).padStart(2,'0');
+  document.getElementById('clock').textContent = p(n.getUTCHours()) + p(n.getUTCMinutes()) + 'Z';
+}
+
+// ============================================================
+// ARRIVAL WINDOW
+// ============================================================
+function initWindow() {
+  const now = new Date();
+  const to  = new Date(now.getTime() + 2*3600000);
+  const fmt = d => d.toISOString().slice(0,16);
+  document.getElementById('arr-from').value = fmt(now);
+  document.getElementById('arr-to').value   = fmt(to);
+  windowFrom = now;
+  windowTo   = to;
+  updateWindowStatus();
+}
+
+function onWindowChange() {
+  const fv = document.getElementById('arr-from').value;
+  const tv = document.getElementById('arr-to').value;
+  if (fv && tv) {
+    windowFrom = new Date(fv + 'Z');
+    windowTo   = new Date(tv + 'Z');
+    updateWindowStatus();
+    rerenderList();
+    renderOverlays();
+  }
+}
+
+function updateWindowStatus() {
+  const fv = document.getElementById('arr-from').value;
+  const tv = document.getElementById('arr-to').value;
+  if (fv && tv) {
+    document.getElementById('window-status').textContent =
+      'Window: ' + fv.slice(11) + ' – ' + tv.slice(11) + 'Z';
+  }
+}
+
+// ============================================================
+// TABS / SAMPLE
+// ============================================================
+function switchTab(tab) {
+  document.getElementById('tab-manual').classList.toggle('active', tab==='manual');
+  document.getElementById('tab-sample').classList.toggle('active', tab==='sample');
+  if (tab === 'sample') loadSample();
+}
+
+function notamTimeStr(offset) {
+  const d = new Date(Date.now() + offset*3600000);
+  const p = v => String(v).padStart(2,'0');
+  return String(d.getUTCFullYear()).slice(2) + p(d.getUTCMonth()+1) + p(d.getUTCDate()) + p(d.getUTCHours()) + p(d.getUTCMinutes());
+}
+
+function loadSample() {
+  document.getElementById('notam-input').value =
+`A1234/25 NOTAMN
+Q) OMAE/QMXLC/IV/NBO/A/000/999/2517N05522E005
+A) OMDB B) ${notamTimeStr(0)} C) ${notamTimeStr(6)}
+E) TWY M6 CLSD
+CREATED: 31 May 2025 00:00:00
+
+A1235/25 NOTAMN
+Q) OMAE/QMXLC/IV/NBO/A/000/999/2517N05522E005
+A) OMDB B) ${notamTimeStr(3)} C) ${notamTimeStr(10)}
+E) TWY K9 AND TWY K10 CLSD
+CREATED: 31 May 2025 00:00:00
+
+A1236/25 NOTAMN
+Q) OMAE/QMXLC/IV/NBO/A/000/999/2517N05522E005
+A) OMDB B) ${notamTimeStr(-48)} C) ${notamTimeStr(-24)}
+E) TWY Z9 PT CLSD
+CREATED: 29 May 2025 00:00:00
+
+A1237/25 NOTAMN
+Q) OMAE/QMXLC/IV/NBO/A/000/999/2517N05522E005
+A) OMDB B) ${notamTimeStr(8)} C) ${notamTimeStr(16)}
+E) TWY M12A BTN TWY N9 AND TWY N10 CLSD
+CREATED: 31 May 2025 00:00:00`;
+}
+
+// ============================================================
+// NOTAM PARSER
+// ============================================================
+function parseNotamTime(str) {
+  if (!str || str.length !== 10) return null;
+  return new Date(Date.UTC(
+    2000 + parseInt(str.slice(0,2)), parseInt(str.slice(2,4))-1,
+    parseInt(str.slice(4,6)), parseInt(str.slice(6,8)), parseInt(str.slice(8,10))
+  ));
+}
+
+function extractClosures(text) {
+  const up   = text.toUpperCase();
+  const seen = new Set();
+  const out  = [];
+  const add  = (twy, type, from, to) => {
+    if (!seen.has(twy)) { seen.add(twy); out.push({ twy, type, from: from||'', to: to||'' }); }
+  };
+
+  for (const m of up.matchAll(/TWY\s+([A-Z0-9]+)\s+BTN\s+(.+?)\s+AND\s+(.+?)\s+CLSD/g))
+    add(m[1], 'partial', m[2].trim(), m[3].trim());
+  for (const m of up.matchAll(/TWY\s+([A-Z0-9]+)\s+(?:FM|FROM)\s+(.+?)\s+(?:TO|TIL)\s+(.+?)\s+CLSD/g))
+    add(m[1], 'partial', m[2].trim(), m[3].trim());
+  for (const m of up.matchAll(/TWY\s+([A-Z0-9]+)\s+AND\s+TWY\s+([A-Z0-9]+)\s+CLSD/g)) {
+    add(m[1], 'full'); add(m[2], 'full');
+  }
+  for (const m of up.matchAll(/TWY\s+([A-Z0-9]+)\s+PT\s+CLSD/g))
+    add(m[1], 'partial');
+  for (const m of up.matchAll(/TWY\s+([A-Z0-9]+)\s+CLSD/g))
+    add(m[1], 'full');
+  return out;
+}
+
+function parseBlock(raw) {
+  const text    = raw.trim();
+  const bMatch  = text.match(/B\)\s*(\d{10})/);
+  const cMatch  = text.match(/C\)\s*(\d{10}|PERM)/i);
+  const eMatch  = text.match(/E\)\s*([\s\S]+?)(?=\n[A-Z]\)|CREATED:|$)/i);
+  const eText   = eMatch ? eMatch[1].trim() : text;
+  const closures = extractClosures(eText);
+  if (!closures.length) return null;
+  let effEnd = null;
+  if (cMatch) {
+    effEnd = /perm/i.test(cMatch[1])
+      ? new Date(Date.now() + 365*86400000) : parseNotamTime(cMatch[1]);
+  }
+  return { raw: text, eText, effStart: bMatch ? parseNotamTime(bMatch[1]) : null, effEnd, closures };
+}
+
+function parseNotams() {
+  const input = document.getElementById('notam-input').value.trim();
+  if (!input) return;
+
+  const cacheKey = 'notam_v2_' + btoa(unescape(encodeURIComponent(input.slice(0,80)))).replace(/[=+/]/g,'');
+  const cached   = sessionStorage.getItem(cacheKey);
+  if (cached) {
+    parsedNotams = JSON.parse(cached).map(n => ({
+      ...n, effStart: n.effStart ? new Date(n.effStart) : null,
+      effEnd: n.effEnd ? new Date(n.effEnd) : null
+    }));
+  } else {
+    const blocks = input.split(/\n{2,}|(?=A\d{4}\/\d{2}\s+NOTAM)/);
+    parsedNotams = blocks.map(parseBlock).filter(Boolean);
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify(parsedNotams.map(n => ({
+        ...n, effStart: n.effStart ? n.effStart.toISOString() : null,
+        effEnd: n.effEnd ? n.effEnd.toISOString() : null
+      }))));
+    } catch(_) {}
+  }
+  showRaw = {}; selectedIdx = null;
+  rerenderList(); renderOverlays();
+}
+
+// ============================================================
+// STATUS
+// ============================================================
+function getStatus(n) {
+  const now = new Date();
+  const wF  = windowFrom || now;
+  const wT  = windowTo   || new Date(now.getTime() + 7200000);
+  if (!n.effStart && !n.effEnd) return 'ACTIVE';
+  if (n.effEnd && n.effEnd < now)  return 'EXPIRED';
+  if (n.effStart && n.effStart > wT) return 'FUTURE';
+  if (n.effEnd && n.effEnd < wF)   return 'EXPIRED';
+  return 'ACTIVE';
+}
+
+// ============================================================
+// NOTAM LIST
+// ============================================================
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtUTC(d) {
+  if (!d) return '?';
+  return d.toISOString().slice(0,16).replace('T',' ') + 'Z';
+}
+function closureLabel(c) {
+  if (c.type==='partial' && c.from) return `${c.twy} BTN ${c.from}↔${c.to}`;
+  if (c.type==='partial')           return `${c.twy} (PART)`;
+  return `TWY ${c.twy}`;
+}
+
+function rerenderList() {
+  const list = document.getElementById('notam-list');
+  if (!parsedNotams.length) {
+    list.innerHTML = '<div class="empty-state">No NOTAMs parsed.<br>Paste text above and click Parse.</div>';
+    return;
+  }
+  const order = { ACTIVE:0, FUTURE:1, EXPIRED:2 };
+  const items = parsedNotams.map((n,i) => ({...n, idx:i, status:getStatus(n)}))
+    .sort((a,b) => order[a.status]-order[b.status]);
+
+  list.innerHTML = items.map(n => `
+    <div class="notam-item ${selectedIdx===n.idx?'selected':''}" onclick="selectNotam(${n.idx})">
+      <div class="notam-item-hdr">
+        <span class="sbadge ${n.status}">${n.status}</span>
+        <span class="notam-twy">${n.closures.map(closureLabel).join(', ')}</span>
+      </div>
+      <div class="notam-desc">${esc(n.eText.slice(0,110))}${n.eText.length>110?'…':''}</div>
+      <div class="notam-time">${fmtUTC(n.effStart)} – ${fmtUTC(n.effEnd)}</div>
+      <button class="raw-toggle" onclick="event.stopPropagation();toggleRaw(${n.idx})">
+        ${showRaw[n.idx]?'▲ hide raw':'▼ show raw'}
+      </button>
+      ${showRaw[n.idx]?`<div class="notam-raw">${esc(n.raw)}</div>`:''}
+    </div>`).join('');
+}
+
+function selectNotam(idx) {
+  selectedIdx = selectedIdx===idx ? null : idx;
+  rerenderList();
+}
+function toggleRaw(idx) {
+  showRaw[idx] = !showRaw[idx];
+  rerenderList();
+}
+
+// ============================================================
+// SVG OVERLAY ENGINE
+// ============================================================
+function getTwyCoord(icao, name) {
+  const twys = getLiveTaxiways();
+  return twys[name] || null;
+}
+
+// Get the midpoint of a polyline (for label placement)
+function polylineMidpoint(pts) {
+  if (!pts || pts.length === 0) return null;
+  if (pts.length === 1) return { x: pts[0][0], y: pts[0][1] };
+  const mid = Math.floor(pts.length / 2);
+  return { x: pts[mid][0], y: pts[mid][1] };
+}
+
+// Clip a polyline between two named intersection points
+// Returns the sub-array of points between fromPt and toPt (closest approach)
+function clipPolyline(pts, fromPt, toPt) {
+  if (!pts || pts.length < 2) return pts;
+  // Find indices of points closest to each intersection
+  const closestIdx = (pt) => {
+    let best = 0, bestD = Infinity;
+    pts.forEach((p, i) => {
+      const d = Math.hypot(p[0]-pt[0], p[1]-pt[1]);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  };
+  const i1 = closestIdx(fromPt);
+  const i2 = closestIdx(toPt);
+  const lo = Math.min(i1, i2), hi = Math.max(i1, i2);
+  return pts.slice(lo, hi + 1);
+}
+
+function renderOverlays() {
+  const hl  = document.getElementById('twy-highlight-layer');
+  const ml  = document.getElementById('marker-layer');
+  hl.innerHTML = '';
+  ml.innerHTML = '';
+  if (!parsedNotams.length) return;
+
+  const ns     = 'http://www.w3.org/2000/svg';
+  const colors = { ACTIVE:'#e84040', FUTURE:'#e8a020', EXPIRED:'#4a5a72' };
+  const S      = 10; // cross arm half-length for dot markers
+
+  parsedNotams.forEach(notam => {
+    const status = getStatus(notam);
+    const color  = colors[status];
+
+    notam.closures.forEach(closure => {
+      const coord = getTwyCoord(currentAirport, closure.twy);
+      if (!coord) return;
+
+      const hasPolyline = coord.points && coord.points.length > 1;
+
+      // ── POLYLINE rendering ──
+      if (hasPolyline) {
+        let pts = coord.points;
+        let isPartial = false;
+
+        // Partial closure: try to clip between named intersection taxiways
+        if (closure.type === 'partial' && closure.from && closure.to) {
+          const intersects = coord.intersects || {};
+          // Match intersection names (NOTAM uses "TWY X" format; strip to just name)
+          const fromName = closure.from.replace(/^TWY\s+/i, '').toUpperCase().trim();
+          const toName   = closure.to.replace(/^TWY\s+/i, '').toUpperCase().trim();
+          const fromPt   = intersects[fromName];
+          const toPt     = intersects[toName];
+
+          if (fromPt && toPt) {
+            pts = clipPolyline(coord.points, fromPt, toPt);
+            isPartial = true;
+          } else {
+            // Fallback: warning dot at first point
+            const fp = coord.points[0];
+            renderWarningDot(ml, ns, fp[0], fp[1], color, status,
+              closure.twy + ' BTN? (no intersections)');
+            return;
+          }
+        }
+
+        // Draw the polyline highlight
+        const ptStr = pts.map(p => p.join(',')).join(' ');
+
+        // Glow ring under
+        const glow = document.createElementNS(ns, 'polyline');
+        glow.setAttribute('points', ptStr);
+        glow.setAttribute('stroke', color);
+        glow.setAttribute('stroke-width', '10');
+        glow.setAttribute('fill', 'none');
+        glow.setAttribute('opacity', '0.15');
+        if (status === 'ACTIVE') glow.setAttribute('class', 'pulse-ring');
+        hl.appendChild(glow);
+
+        // Main line
+        const g = document.createElementNS(ns, 'g');
+        g.setAttribute('class', 'twy-overlay');
+
+        const line = document.createElementNS(ns, 'polyline');
+        line.setAttribute('points', ptStr);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', '3.5');
+        line.setAttribute('fill', 'none');
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('stroke-linejoin', 'round');
+        if (status === 'ACTIVE') line.setAttribute('class', 'pulse-ring');
+        g.appendChild(line);
+
+        // X marks at endpoints
+        pts.forEach((pt, idx) => {
+          if (idx === 0 || idx === pts.length - 1) {
+            const xg = mkXMark(ns, pt[0], pt[1], 7, color);
+            g.appendChild(xg);
+          }
+        });
+
+        // Label at midpoint
+        const mid = polylineMidpoint(pts);
+        if (mid) {
+          renderLabel(g, ns, mid.x, mid.y, coord.label || closure.twy, color, isPartial);
+        }
+        ml.appendChild(g);
+
+      } else {
+        // ── DOT / single-point marker (fallback for un-traced taxiways) ──
+        const cx = coord.points ? coord.points[0][0] : (coord.x || 0);
+        const cy = coord.points ? coord.points[0][1] : (coord.y || 0);
+
+        const ring = document.createElementNS(ns, 'circle');
+        ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', 14);
+        ring.setAttribute('fill', color); ring.setAttribute('opacity', '0.18');
+        if (status === 'ACTIVE') ring.setAttribute('class', 'pulse-ring');
+        hl.appendChild(ring);
+
+        const g = document.createElementNS(ns, 'g');
+        g.setAttribute('class', 'twy-overlay');
+
+        const circ = document.createElementNS(ns, 'circle');
+        circ.setAttribute('cx', cx); circ.setAttribute('cy', cy); circ.setAttribute('r', 13);
+        circ.setAttribute('fill', 'rgba(10,13,17,0.82)');
+        circ.setAttribute('stroke', color); circ.setAttribute('stroke-width', '1.5');
+        if (status === 'ACTIVE') circ.setAttribute('class', 'pulse-ring');
+        g.appendChild(circ);
+
+        const xg = mkXMark(ns, cx, cy, S, color);
+        g.appendChild(xg);
+        renderLabel(g, ns, cx + 16, cy - 10, (coord.label || closure.twy), color, false);
+        ml.appendChild(g);
+      }
+    });
+  });
+}
+
+function mkXMark(ns, cx, cy, s, color) {
+  const g = document.createElementNS(ns, 'g');
+  const mkL = (x1,y1,x2,y2) => {
+    const l = document.createElementNS(ns, 'line');
+    l.setAttribute('x1',x1); l.setAttribute('y1',y1);
+    l.setAttribute('x2',x2); l.setAttribute('y2',y2);
+    l.setAttribute('stroke', color); l.setAttribute('stroke-width', '2.5');
+    l.setAttribute('stroke-linecap', 'round');
+    return l;
+  };
+  g.appendChild(mkL(cx-s, cy-s, cx+s, cy+s));
+  g.appendChild(mkL(cx+s, cy-s, cx-s, cy+s));
+  return g;
+}
+
+function renderWarningDot(layer, ns, cx, cy, color, status, labelText) {
+  const ring = document.createElementNS(ns, 'circle');
+  ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', 10);
+  ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', '#e8a020');
+  ring.setAttribute('stroke-width', '2'); ring.setAttribute('stroke-dasharray', '3,3');
+  layer.appendChild(ring);
+
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class', 'twy-overlay');
+  renderLabel(g, ns, cx + 14, cy - 8, labelText, '#e8a020', true);
+  layer.appendChild(g);
+}
+
+function renderLabel(parent, ns, lx, ly, text, color, isPartial) {
+  const suffix = ' CLSD' + (isPartial ? ' (PT)' : '');
+  const label  = text + suffix;
+  const lw     = label.length * 6 + 8;
+
+  const lbg = document.createElementNS(ns, 'rect');
+  lbg.setAttribute('x', lx); lbg.setAttribute('y', ly - 8);
+  lbg.setAttribute('width', lw); lbg.setAttribute('height', 13);
+  lbg.setAttribute('rx', 2);
+  lbg.setAttribute('fill', 'rgba(10,13,17,0.88)');
+  lbg.setAttribute('stroke', color); lbg.setAttribute('stroke-width', '0.8');
+  parent.appendChild(lbg);
+
+  const lt = document.createElementNS(ns, 'text');
+  lt.setAttribute('x', lx + lw/2); lt.setAttribute('y', ly);
+  lt.setAttribute('text-anchor', 'middle');
+  lt.setAttribute('font-family', "'Share Tech Mono', monospace");
+  lt.setAttribute('font-size', '9');
+  lt.setAttribute('fill', color);
+  lt.setAttribute('dy', '0.1em');
+  lt.textContent = label;
+  parent.appendChild(lt);
+}
+
+// ============================================================
+// TAXIWAY EDITOR — point + polyline system
+// ============================================================
+
+// ── State ──
+let addMode    = null;   // string: name of twy being added, null otherwise
+let traceMode  = false;  // true while drawing a polyline
+let traceTwy   = null;   // name of twy being traced
+let tracePoints = [];    // [[x,y],...] live trace points
+
+const INTERSECT_THRESHOLD = 8; // px in viewBox space
+
+// ── Data helpers ──
+
+// Merge base airport data with calibData edits/deletions
+function getLiveTaxiways() {
+  const ap = AIRPORTS[currentAirport];
+  const merged = { ...ap.taxiways };
+  Object.entries(calibData).forEach(([k, v]) => {
+    if (v._deleted) delete merged[k];
+    else merged[k] = v;
+  });
+  return merged;
+}
+
+// Migrate old {x,y} format → {points:[[x,y]]} on import
+function migrateEntry(name, v) {
+  if (v._deleted) return v;
+  if (v.points) return v;                 // already polyline
+  if (typeof v.x === 'number') {
+    return { points: [[v.x, v.y]], label: v.label || name };
+  }
+  return v;
+}
+
+// Auto-compute intersections between all committed polylines
+// For each pair of taxiways, find the closest point pair ≤ threshold
+function recomputeIntersections() {
+  const twys = getLiveTaxiways();
+  const names = Object.keys(twys);
+
+  // Clear existing intersects
+  names.forEach(n => {
+    if (twys[n] && twys[n].points) {
+      if (!calibData[n]) calibData[n] = JSON.parse(JSON.stringify(twys[n]));
+      calibData[n].intersects = {};
+    }
+  });
+
+  for (let i = 0; i < names.length; i++) {
+    for (let j = i + 1; j < names.length; j++) {
+      const na = names[i], nb = names[j];
+      const a  = getLiveTaxiways()[na], b = getLiveTaxiways()[nb];
+      if (!a || !a.points || !b || !b.points) continue;
+
+      let best = null, bestDist = Infinity;
+      for (const pa of a.points) {
+        for (const pb of b.points) {
+          const d = Math.hypot(pa[0]-pb[0], pa[1]-pb[1]);
+          if (d < bestDist) { bestDist = d; best = { pa, pb }; }
+        }
+      }
+      if (bestDist <= INTERSECT_THRESHOLD && best) {
+        const midX = Math.round((best.pa[0] + best.pb[0]) / 2);
+        const midY = Math.round((best.pa[1] + best.pb[1]) / 2);
+        if (!calibData[na]) calibData[na] = JSON.parse(JSON.stringify(getLiveTaxiways()[na]));
+        if (!calibData[nb]) calibData[nb] = JSON.parse(JSON.stringify(getLiveTaxiways()[nb]));
+        calibData[na].intersects = calibData[na].intersects || {};
+        calibData[nb].intersects = calibData[nb].intersects || {};
+        calibData[na].intersects[nb] = [midX, midY];
+        calibData[nb].intersects[na] = [midX, midY];
+      }
+    }
+  }
+}
+
+// ── Panel toggle ──
+function toggleCalib() {
+  calibMode = !calibMode;
+  const btn   = document.getElementById('calib-btn');
+  const panel = document.getElementById('calib-panel');
+  const svg   = document.getElementById('overlay-svg');
+  btn.classList.toggle('active', calibMode);
+  panel.classList.toggle('visible', calibMode);
+  svg.classList.toggle('calib-mode', calibMode);
+  if (calibMode) {
+    renderTwyList();
+    renderCalibDots();
+  } else {
+    document.getElementById('calib-dot-layer').innerHTML = '';
+    cancelTrace();
+    addMode = null;
+  }
+}
+
+// ── Taxiway list ──
+function renderTwyList() {
+  const list = document.getElementById('calib-twy-list');
+  const twys = getLiveTaxiways();
+  const sorted = Object.keys(twys).sort();
+  list.innerHTML = sorted.map(name => {
+    const c = twys[name];
+    const isNew     = !AIRPORTS[currentAirport].taxiways[name];
+    const isEdited  = calibData[name] && !calibData[name]._deleted && !isNew;
+    const hasLine   = c && c.points && c.points.length > 1;
+    const nameColor = isNew ? 'color:var(--green)' : isEdited ? 'color:var(--amber)' : '';
+    const lineTag   = hasLine
+      ? `<span style="font-size:8px;color:#3d8ef0;margin-left:4px">LINE(${c.points.length}pts)</span>`
+      : `<span style="font-size:8px;color:var(--text3);margin-left:4px">dot</span>`;
+    const isSelected = calibTwy === name;
+    return `<div class="calib-twy-row ${isSelected ? 'selected-twy' : ''}" onclick="selectTwy('${name}')">
+      <span class="calib-twy-name" style="${nameColor}">${name}${lineTag}</span>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="calib-del-btn" onclick="event.stopPropagation();startTrace('${name}')" title="Trace polyline" style="color:var(--accent);font-size:10px">✏</button>
+        <button class="calib-del-btn" onclick="event.stopPropagation();deleteTwy('${name}')" title="Delete" style="color:var(--red)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectTwy(name) {
+  calibTwy = name;
+  cancelTrace();
+  addMode  = null;
+  document.getElementById('add-mode-hint').classList.remove('visible');
+  const c = getLiveTaxiways()[name];
+  const pts = c && c.points ? c.points.length : 0;
+  document.getElementById('calib-coords').textContent =
+    `Selected: ${name}  ${pts > 1 ? pts+' pts' : c ? 'x='+c.points[0][0]+', y='+c.points[0][1] : ''}
+Click chart to reposition dot, or ✏ to trace polyline.`;
+  renderTwyList();
+  renderCalibDots();
+}
+
+function deleteTwy(name) {
+  calibData[name] = { _deleted: true };
+  if (calibTwy === name) { calibTwy = null; }
+  cancelTrace();
+  renderTwyList();
+  renderCalibDots();
+  renderOverlays();
+}
+
+// ── Add new taxiway ──
+function startAddTwy() {
+  const input = document.getElementById('new-twy-name');
+  const name  = input.value.trim().toUpperCase();
+  if (!name) { input.focus(); return; }
+  const twys = getLiveTaxiways();
+  if (twys[name]) {
+    selectTwy(name);
+    input.value = '';
+    document.getElementById('calib-coords').textContent = `${name} already mapped. Click chart to reposition.`;
+    return;
+  }
+  cancelTrace();
+  addMode = name;
+  calibTwy = null;
+  document.getElementById('add-twy-label').textContent = name;
+  document.getElementById('add-mode-hint').classList.add('visible');
+  document.getElementById('calib-coords').textContent = `Click chart to place ${name}`;
+}
+
+// ── Polyline trace ──
+function startTrace(name) {
+  cancelTrace();
+  traceMode   = true;
+  traceTwy    = name;
+  calibTwy    = name;
+  addMode     = null;
+  tracePoints = [];
+  // Pre-load existing points if any
+  const existing = getLiveTaxiways()[name];
+  if (existing && existing.points && existing.points.length > 0) {
+    tracePoints = [...existing.points];
+  }
+  document.getElementById('add-mode-hint').classList.remove('visible');
+  document.getElementById('calib-coords').textContent =
+    `TRACE: ${name}
+Click to add points. Dbl-click or ✓ Done to finish.
+⌫ Undo last  ✕ Clear`;
+  document.getElementById('trace-controls').style.display = 'flex';
+  document.getElementById('overlay-svg').classList.add('calib-mode');
+  renderTwyList();
+  renderCalibDots();
+}
+
+function cancelTrace() {
+  traceMode   = false;
+  traceTwy    = null;
+  tracePoints = [];
+  const tc = document.getElementById('trace-controls');
+  if (tc) tc.style.display = 'none';
+  renderCalibDots();
+}
+
+function commitTrace() {
+  if (!traceMode || !traceTwy || tracePoints.length < 1) { cancelTrace(); return; }
+  const name  = traceTwy;
+  const label = name;
+  const existing = getLiveTaxiways()[name] || {};
+  calibData[name] = { ...existing, points: [...tracePoints], label, intersects: {} };
+  cancelTrace();
+  recomputeIntersections();
+  renderTwyList();
+  renderCalibDots();
+  renderOverlays();
+  document.getElementById('calib-coords').textContent =
+    `${name}: ${tracePoints.length} pts saved. Intersections recomputed.`;
+}
+
+function undoLastTracePoint() {
+  if (tracePoints.length > 0) {
+    tracePoints.pop();
+    renderCalibDots();
+    document.getElementById('calib-coords').textContent =
+      `TRACE: ${traceTwy} — ${tracePoints.length} pts. Click to continue.`;
+  }
+}
+
+function clearTrace() {
+  tracePoints = [];
+  renderCalibDots();
+  document.getElementById('calib-coords').textContent =
+    `TRACE: ${traceTwy} — cleared. Click to start again.`;
+}
+
+// ── Chart click handler ──
+function onChartClick(e) {
+  if (!calibMode) return;
+  const svg  = document.getElementById('overlay-svg');
+  const rect = svg.getBoundingClientRect();
+  const vb   = svg.viewBox.baseVal;
+  const x = Math.round((e.clientX - rect.left) / rect.width  * vb.width);
+  const y = Math.round((e.clientY - rect.top)  / rect.height * vb.height);
+
+  if (traceMode) {
+    // Double-click commits
+    if (e.detail >= 2) { commitTrace(); return; }
+    tracePoints.push([x, y]);
+    renderCalibDots();
+    document.getElementById('calib-coords').textContent =
+      `TRACE: ${traceTwy} — ${tracePoints.length} pts. Dbl-click or ✓ Done to finish.`;
+    return;
+  }
+
+  if (addMode) {
+    const name = addMode;
+    calibData[name] = { points: [[x, y]], label: name, intersects: {} };
+    calibTwy = name;
+    addMode  = null;
+    document.getElementById('add-mode-hint').classList.remove('visible');
+    document.getElementById('new-twy-name').value = '';
+    document.getElementById('calib-coords').textContent = `Added ${name} at x=${x}, y=${y}`;
+    recomputeIntersections();
+    renderTwyList();
+    renderCalibDots();
+    renderOverlays();
+    return;
+  }
+
+  if (calibTwy) {
+    // Reposition: set single-point or update first point of polyline
+    const existing = getLiveTaxiways()[calibTwy] || {};
+    if (existing.points && existing.points.length > 1) {
+      // Don't overwrite full polyline with a single click — warn
+      document.getElementById('calib-coords').textContent =
+        `${calibTwy} has a polyline (${existing.points.length} pts).
+Use ✏ to retrace, or Export+re-import.`;
+    } else {
+      calibData[calibTwy] = { points: [[x, y]], label: calibTwy, intersects: {} };
+      recomputeIntersections();
+      renderTwyList();
+      renderCalibDots();
+      renderOverlays();
+      document.getElementById('calib-coords').textContent =
+        `${calibTwy}: repositioned to x=${x}, y=${y}`;
+    }
+  }
+}
+
+// ── Calibration dots + live trace preview ──
+function populateCalibSelect() {}  // no-op (kept for compat)
+
+function renderCalibDots() {
+  const layer = document.getElementById('calib-dot-layer');
+  layer.innerHTML = '';
+  if (!calibMode) return;
+  const ns   = 'http://www.w3.org/2000/svg';
+  const twys = getLiveTaxiways();
+
+  // Draw committed polylines / dots
+  Object.entries(twys).forEach(([name, coord]) => {
+    if (!coord || !coord.points) return;
+    const isNew      = !AIRPORTS[currentAirport].taxiways[name];
+    const isEdited   = calibData[name] && !calibData[name]._deleted && !isNew;
+    const isSelected = name === calibTwy;
+    const color = isSelected ? '#ffffff' : isNew ? '#2aad5e' : isEdited ? '#e8a020' : '#3d8ef0';
+
+    if (coord.points.length > 1) {
+      // Draw polyline
+      const pts = coord.points.map(p => p.join(',')).join(' ');
+      const pl = document.createElementNS(ns, 'polyline');
+      pl.setAttribute('points', pts);
+      pl.setAttribute('stroke', color);
+      pl.setAttribute('stroke-width', isSelected ? '2' : '1.5');
+      pl.setAttribute('fill', 'none');
+      pl.setAttribute('opacity', isSelected ? '1' : '0.65');
+      layer.appendChild(pl);
+    }
+
+    // Draw vertex dots
+    coord.points.forEach((pt, idx) => {
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', pt[0]); dot.setAttribute('cy', pt[1]);
+      dot.setAttribute('r', isSelected ? (idx === 0 ? 5 : 3) : 2.5);
+      dot.setAttribute('fill', color);
+      dot.setAttribute('opacity', isSelected ? '1' : '0.7');
+      layer.appendChild(dot);
+    });
+
+    // Label at first point
+    const fp = coord.points[0];
+    const lbl = document.createElementNS(ns, 'text');
+    lbl.setAttribute('x', fp[0] + 5); lbl.setAttribute('y', fp[1] - 3);
+    lbl.setAttribute('font-family', "'Share Tech Mono',monospace");
+    lbl.setAttribute('font-size', isSelected ? '8' : '7');
+    lbl.setAttribute('fill', color);
+    lbl.setAttribute('opacity', isSelected ? '1' : '0.75');
+    lbl.textContent = name;
+    layer.appendChild(lbl);
+
+    // Draw intersection dots
+    if (coord.intersects) {
+      Object.values(coord.intersects).forEach(pt => {
+        const idot = document.createElementNS(ns, 'circle');
+        idot.setAttribute('cx', pt[0]); idot.setAttribute('cy', pt[1]);
+        idot.setAttribute('r', 3);
+        idot.setAttribute('fill', 'none');
+        idot.setAttribute('stroke', '#e8a020');
+        idot.setAttribute('stroke-width', '1.5');
+        idot.setAttribute('opacity', '0.7');
+        layer.appendChild(idot);
+      });
+    }
+  });
+
+  // Draw live trace preview
+  if (traceMode && tracePoints.length > 0) {
+    if (tracePoints.length > 1) {
+      const pts = tracePoints.map(p => p.join(',')).join(' ');
+      const pl = document.createElementNS(ns, 'polyline');
+      pl.setAttribute('points', pts);
+      pl.setAttribute('stroke', '#e8a020');
+      pl.setAttribute('stroke-width', '2');
+      pl.setAttribute('fill', 'none');
+      pl.setAttribute('stroke-dasharray', '4,3');
+      layer.appendChild(pl);
+    }
+    tracePoints.forEach((pt, idx) => {
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', pt[0]); dot.setAttribute('cy', pt[1]);
+      dot.setAttribute('r', idx === tracePoints.length - 1 ? 5 : 3);
+      dot.setAttribute('fill', idx === tracePoints.length - 1 ? '#e8a020' : '#c8a060');
+      layer.appendChild(dot);
+    });
+    const lbl = document.createElementNS(ns, 'text');
+    lbl.setAttribute('x', tracePoints[0][0] + 5); lbl.setAttribute('y', tracePoints[0][1] - 4);
+    lbl.setAttribute('font-family', "'Share Tech Mono',monospace");
+    lbl.setAttribute('font-size', '8');
+    lbl.setAttribute('fill', '#e8a020');
+    lbl.textContent = `${traceTwy} (${tracePoints.length}pts)`;
+    layer.appendChild(lbl);
+  }
+}
+
+// ── Import ──
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      let twys = null;
+      if (data[currentAirport] && data[currentAirport].taxiways) twys = data[currentAirport].taxiways;
+      else if (data.taxiways) twys = data.taxiways;
+      else if (typeof Object.values(data)[0] === 'object' && ('x' in Object.values(data)[0] || 'points' in Object.values(data)[0])) twys = data;
+      if (!twys) { alert('Unrecognised JSON format.'); return; }
+      // Migrate old {x,y} entries + merge
+      let count = 0;
+      Object.entries(twys).forEach(([k, v]) => {
+        if (!v._deleted) { calibData[k] = migrateEntry(k, v); count++; }
+      });
+      recomputeIntersections();
+      document.getElementById('calib-coords').textContent = `Imported ${count} taxiways. Intersections recomputed.`;
+      renderTwyList();
+      renderCalibDots();
+      renderOverlays();
+    } catch(err) { alert('JSON parse error: ' + err.message); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── Export ──
+function exportCalibData() {
+  const twys = getLiveTaxiways();
+  const json = JSON.stringify({ [currentAirport]: { taxiways: twys } }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = currentAirport + '_taxiway_map.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+// ============================================================
+// RESPONSIVE SIDEBAR / AIRPORT MANAGER
+// ============================================================
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sidebar-backdrop').classList.toggle('visible');
+}
+
+function openAirportManager() {
+  renderManagerList();
+  document.getElementById('manager-modal').style.display = 'flex';
+}
+
+function closeAirportManager() {
+  document.getElementById('manager-modal').style.display = 'none';
+}
+
+function renderManagerList() {
+  const list = document.getElementById('manager-list');
+  list.innerHTML = Object.values(AIRPORTS).map(ap => `
+    <div class="airport-card">
+      <div class="airport-card-header">
+        <div><span class="ac-icao">${ap.icao}</span> <span class="ac-name">${ap.name}</span></div>
+        <div class="ac-status ${ap.custom ? 'loaded' : ''}">${ap.custom ? 'CUSTOM' : 'BUILT-IN'}</div>
+      </div>
+      <div class="ac-actions">
+        <button class="mgr-btn primary" onclick="selectAirportFromManager('${ap.icao}')">Load</button>
+        ${ap.custom ? `<button class="mgr-btn danger" onclick="removeCustomAirport('${ap.icao}')">Delete</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectAirportFromManager(icao) {
+  switchAirport(icao);
+  closeAirportManager();
+}
+
+function removeCustomAirport(icao) {
+  if (!confirm('Remove ' + icao + ' from this device?')) return;
+  delete AIRPORTS[icao];
+  saveCustomAirports();
+  populateAirportSelect();
+  renderManagerList();
+  if (currentAirport === icao) {
+    const fallback = Object.keys(AIRPORTS)[0];
+    if (fallback) loadAirport(fallback);
+  }
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsText(file);
+  });
+}
+
+function readImageDimensions(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 1000, h: 1000 });
+    img.src = dataUrl;
+  });
+}
+
+async function importCustomAirport() {
+  const icao      = document.getElementById('custom-icao').value.trim().toUpperCase();
+  const name      = document.getElementById('custom-name').value.trim();
+  const chartFile = document.getElementById('custom-chart').files[0];
+  const twyFile   = document.getElementById('custom-twy').files[0];
+
+  if (!/^[A-Z0-9]{4}$/.test(icao)) { alert('Enter a valid 4-character ICAO code.'); return; }
+  if (!name) { alert('Enter an airport name.'); return; }
+  if (!chartFile) { alert('Select a chart image.'); return; }
+  if (AIRPORTS[icao]) { alert(icao + ' already exists.'); return; }
+
+  let taxiways = {};
+  if (twyFile) {
+    try {
+      const parsed = JSON.parse(await readFileAsText(twyFile));
+      taxiways = (parsed[icao] && parsed[icao].taxiways) ? parsed[icao].taxiways
+               : parsed.taxiways ? parsed.taxiways
+               : parsed;
+    } catch (err) {
+      alert('Taxiway JSON is invalid: ' + err.message);
+      return;
+    }
+  }
+
+  const chartDataUrl = await readFileAsDataURL(chartFile);
+  const dims = await readImageDimensions(chartDataUrl);
+
+  AIRPORTS[icao] = {
+    icao, name, iata: '', country: '', region: '',
+    viewBox: `0 0 ${dims.w} ${dims.h}`,
+    chart: chartDataUrl,
+    taxiways,
+    custom: true
+  };
+  saveCustomAirports();
+  populateAirportSelect();
+  renderManagerList();
+  document.getElementById('custom-icao').value  = '';
+  document.getElementById('custom-name').value  = '';
+  document.getElementById('custom-chart').value = '';
+  document.getElementById('custom-twy').value   = '';
+  switchAirport(icao);
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+window.addEventListener('DOMContentLoaded', init);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.error('SW registration failed', err));
+  });
+}
+</script>
+
+</body></html>
