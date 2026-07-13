@@ -1375,6 +1375,7 @@ function renderManagerList() {
       </div>
       <div class="ac-actions">
         <button class="mgr-btn primary" onclick="selectAirportFromManager('${ap.icao}')">Load</button>
+        ${!ap.custom ? `<button class="mgr-btn" id="refresh-btn-${ap.icao}" onclick="forceRefreshAirport('${ap.icao}')">⟳ Force Refresh</button>` : ''}
         ${ap.custom ? `<button class="mgr-btn danger" onclick="removeCustomAirport('${ap.icao}')">Delete</button>` : ''}
       </div>
     </div>
@@ -1384,6 +1385,53 @@ function renderManagerList() {
 function selectAirportFromManager(icao) {
   switchAirport(icao);
   closeAirportManager();
+}
+
+// Ask the service worker to drop its cached chart.jpg/taxiways.json for one
+// airport so the next fetch goes to the network instead of the cache.
+function purgeAirportCache(icao) {
+  return new Promise(resolve => {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) { resolve(); return; }
+    const channel = new MessageChannel();
+    const timer = setTimeout(resolve, 2000);
+    channel.port1.onmessage = () => { clearTimeout(timer); resolve(); };
+    navigator.serviceWorker.controller.postMessage({ action: 'clearAirportCache', icao }, [channel.port2]);
+  });
+}
+
+async function forceRefreshAirport(icao) {
+  const ap = AIRPORTS[icao];
+  if (!ap || ap.custom) return;
+  const btn = document.getElementById(`refresh-btn-${icao}`);
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; }
+
+  try {
+    await purgeAirportCache(icao);
+
+    if (ap.taxiwaysUrl) {
+      const res = await fetch(ap.taxiwaysUrl, { cache: 'reload' });
+      ap.taxiways = await res.json();
+    }
+
+    if (currentAirport === icao) {
+      // Fetch the chart as a blob rather than reassigning <img>.src — browsers
+      // treat re-assigning the same resolved URL as a no-op and won't re-fetch.
+      const img          = document.getElementById('chart-img');
+      const chartRes     = await fetch(ap.chart, { cache: 'reload' });
+      const blob         = await chartRes.blob();
+      const oldBlobUrl   = img.dataset.blobUrl;
+      img.src            = URL.createObjectURL(blob);
+      img.dataset.blobUrl = img.src;
+      if (oldBlobUrl) URL.revokeObjectURL(oldBlobUrl);
+      rerenderList();
+      renderOverlays();
+    }
+  } catch (err) {
+    console.error('Force refresh failed for', icao, err);
+    alert('Refresh failed: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ Force Refresh'; }
+  }
 }
 
 function removeCustomAirport(icao) {
