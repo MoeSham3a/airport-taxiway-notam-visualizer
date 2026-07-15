@@ -1378,7 +1378,9 @@ function importJSON(event) {
 // ── Export ──
 function exportCalibData() {
   const twys = getLiveTaxiways();
-  const json = JSON.stringify({ [currentAirport]: { taxiways: twys } }, null, 2);
+  // Flat shape, matching airports/<ICAO>/taxiways.json exactly — the
+  // download is a drop-in replacement for the shipped baseline file.
+  const json = JSON.stringify(twys, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
